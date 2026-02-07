@@ -16,6 +16,7 @@ Connections (https://os.mbed.com/platforms/ST-Nucleo-F767ZI/)
 | RST      | PB9      | Reset        |
 | BL       | -        | Backlight    |
 
+
 | BME280   | Port     | Function     |
 |------------------------------------|
 | VCC      | 3,3V     | Vcc          |
@@ -25,9 +26,12 @@ Connections (https://os.mbed.com/platforms/ST-Nucleo-F767ZI/)
 | MISO     | PC2      | SPI2_MISO    |
 | CS       | PC0      | Chip Select  |
 
+
 ![BME280 raw data burst via SPI](/Doc/BME280_raw_data_burst_via_SPI.bmp)
 
 Hardware
 BME280: https://seengreat.com/product/207/bme280-environmental-sensor?srsltid=AfmBOorvlymsT9w0Ea-JBnftBbgADYcXMKpadnPHUyHl7X1wOO5TTgUa
+
 LCD: https://www.waveshare.com/wiki/2.4inch_LCD_Module?srsltid=AfmBOoqtv3bq-mZfPtsi2BxiewwQnIkomXrloIzpVwGw_HnrOcmvQZar
+
 Nucleo-STM32767ZI: https://www.st.com/en/evaluation-tools/nucleo-f767zi.html
