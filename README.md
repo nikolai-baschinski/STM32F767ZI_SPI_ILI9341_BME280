@@ -18,7 +18,7 @@ Connections (https://os.mbed.com/platforms/ST-Nucleo-F767ZI/)
 
 
 | BME280   | Port     | Function     |
-|------------------------------------|
+|----------|----------|--------------|
 | VCC      | 3,3V     | Vcc          |
 | GND      | GND      | GND          |
 | SCK      | PB13     | SPI2_CLK     |
