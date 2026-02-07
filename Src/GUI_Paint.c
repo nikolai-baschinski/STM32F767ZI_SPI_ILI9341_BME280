@@ -694,7 +694,7 @@ parameter:
 void Paint_DrawFloatNum(UWORD Xpoint, UWORD Ypoint, double Nummber,  UBYTE Decimal_Point, 
                         sFONT* Font,  UWORD Color_Background, UWORD Color_Foreground)
 {
-    char Str[ARRAY_LEN];
+/*    char Str[ARRAY_LEN];
     sprintf(Str,"%.*lf",Decimal_Point+2,Nummber);
     char * pStr= (char *)malloc((strlen(Str))*sizeof(char));
     memcpy(pStr,Str,(strlen(Str)-2));
@@ -704,9 +704,15 @@ void Paint_DrawFloatNum(UWORD Xpoint, UWORD Ypoint, double Nummber,  UBYTE Decim
       *(pStr+strlen(Str)-3)='\0';
     }
     //show
-    Paint_DrawString_EN(Xpoint, Ypoint, (const char*)pStr, Font, Color_Foreground, Color_Background);
+    Paint_DrawString_EN(Xpoint, Ypoint, (const char*)pStr, Font, Color_Background, Color_Foreground);
     free(pStr);
     pStr=NULL;
+    */
+  char Str[32];
+  sprintf(Str, "%.*lf", Decimal_Point, Nummber);
+
+  Paint_DrawString_EN(Xpoint, Ypoint, Str, Font, Color_Background, Color_Foreground);
+
 }
 /******************************************************************************
 function:	Display time

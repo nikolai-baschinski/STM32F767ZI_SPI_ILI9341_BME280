@@ -1,10 +1,33 @@
 // Nikolai Baschinski
-// Nucleo-F767ZI LD1 blinking 1Hz bare metal
-// PG0 pin toggle 50 Hz
+// Reading temperature, air pressure and humidity from BME280
+// and showing it on the ILI93411 LCD
 
+#include <string.h>
 #include "stm32f767xx.h"
 #include "main.h"
 #include "lcd.h"
+#include "bme.h"
+
+#define MAX_RECV_BURST 20
+
+uint8_t data_rcv_burst[MAX_RECV_BURST]= {0};
+uint16_t cntr_burst = 0;
+
+uint8_t print_on_lcd_flag = 0;
+
+void SPI2_TransmitBurst(uint8_t data)
+{
+  while(!(SPI2->SR & SPI_SR_TXE));
+  SPI2->DR = data;
+
+  while(!(SPI2->SR & SPI_SR_TXE));
+  while(SPI2->SR & SPI_SR_BSY);
+
+  while((SPI2->SR & SPI_SR_RXNE) && (cntr_burst < MAX_RECV_BURST)) {
+    data_rcv_burst[cntr_burst] = SPI2->DR;
+    cntr_burst++;
+  }
+}
 
 int main(void)
 {
@@ -14,34 +37,76 @@ int main(void)
   init_TIM2();
   init_TIM3();
   init_SPI1();
+  init_SPI2();
+  init_bme();
   init_NVIC();
 
   lcd_reset();
-  lcd_CS_enable(); // chip select
+  lcd_CS_enable();
   lcd_init();
   lcd_clear_display(WHITE);
 
-  Paint_NewImage(LCD_2IN4_WIDTH, LCD_2IN4_HEIGHT, ROTATE_0, WHITE);
+  Paint_NewImage(LCD_2IN4_WIDTH, LCD_2IN4_HEIGHT, ROTATE_270, WHITE);
   Paint_SetClearFuntion(lcd_clear_display);
   Paint_SetDisplayFuntion(lcd_draw_paint);
 
-  Paint_DrawString_EN (5, 34, "Hello World",  &Font24,    BLUE,    CYAN);
-  Paint_DrawFloatNum  (5, 150 ,987.654321,2,  &Font20,    BLACK,   WHITE);
+  Paint_DrawString_EN(10, 30, "Temperat:      C", &Font24, WHITE, BLACK);
+  Paint_DrawString_EN(10, 60, "Pressure:      hPa", &Font24, WHITE, BLACK);
+  Paint_DrawString_EN(10, 90, "Humidity:      %", &Font24, WHITE, BLACK);
 
-  Paint_DrawRectangle (125, 240, 225, 300,    RED     ,DOT_PIXEL_2X2,DRAW_FILL_EMPTY);
-  Paint_DrawLine      (125, 240, 225, 300,    MAGENTA ,DOT_PIXEL_2X2,LINE_STYLE_SOLID);
-  Paint_DrawLine      (225, 240, 125, 300,    MAGENTA ,DOT_PIXEL_2X2,LINE_STYLE_SOLID);
-
-  Paint_DrawCircle(150,100,  25,        BLUE    ,DOT_PIXEL_2X2,DRAW_FILL_EMPTY);
-  Paint_DrawCircle(180,100,  25,        BLACK   ,DOT_PIXEL_2X2,DRAW_FILL_EMPTY);
-  Paint_DrawCircle(210,100,  25,        RED     ,DOT_PIXEL_2X2,DRAW_FILL_EMPTY);
-  Paint_DrawCircle(165,125,  25,        YELLOW  ,DOT_PIXEL_2X2,DRAW_FILL_EMPTY);
-  Paint_DrawCircle(195,125,  25,        GREEN   ,DOT_PIXEL_2X2,DRAW_FILL_EMPTY);
-
-  //Paint_DrawImage(gImage_a,0,0,240,320);
   lcd_CS_disable();
 
-  for(;;);
+  struct BME280_for_LCD bme280;
+  struct BME280_for_LCD bme280_memory;
+
+  for(;;) {
+
+    memset(&data_rcv_burst, 0, MAX_RECV_BURST);
+    cntr_burst = 0;
+
+    bme_CS_enable();
+    SPI2_TransmitBurst(0xF7); // start burst
+    for(int i=0; i<4; i++) {
+      SPI2_TransmitBurst(0xFF); // run the burst with dummy data on MOSI
+    }
+    bme_CS_disable();
+
+    bme_set_raw_data(data_rcv_burst);
+    bme_compensate();
+    bme_get_sensor_data(&bme280);
+
+    // update
+    if(print_on_lcd_flag==1)  {
+      print_on_lcd_flag = 0;
+
+      if(bme280.temperature != bme280_memory.temperature) {
+        lcd_CS_enable();
+        Paint_ClearWindows(180, 30, 265, 50, WHITE);
+        Paint_DrawFloatNum(180, 30, bme280.temperature, 1, &Font24, WHITE, BLACK);
+        lcd_CS_disable();
+      }
+
+      if(bme280.pressure != bme280_memory.pressure) {
+        lcd_CS_enable();
+        Paint_ClearWindows(180, 60, 265, 80, WHITE);
+        Paint_DrawNum(180, 60, bme280.pressure, &Font24, WHITE, BLACK);
+        lcd_CS_disable();
+      }
+
+      if(bme280.humidity != bme280_memory.humidity) {
+        lcd_CS_enable();
+        Paint_ClearWindows(180, 90, 265, 110, WHITE);
+        Paint_DrawNum(180, 90, bme280.humidity, &Font24, WHITE, BLACK);
+        lcd_CS_disable();
+      }
+
+      bme280_memory.temperature = bme280.temperature;
+      bme280_memory.pressure = bme280.pressure;
+      bme280_memory.humidity = bme280.humidity;
+    }
+
+    for (int i = 0;i < 100000;i++); // 34 ms when 100000
+  }
 }
 
 void TIM2_IRQHandler(void)
@@ -53,11 +118,12 @@ void TIM2_IRQHandler(void)
 
     if(cntr_10ms % 100 == 0) {
       GPIO_toggle_green_LED();
+      print_on_lcd_flag = 1;
     }
 
     cntr_10ms++;
 
-    GPIO_toggle_Pin_PG0();
+    //GPIO_toggle_Pin_PG0();
   }
 }
 
@@ -101,22 +167,28 @@ void init_PLL()
 
 void init_GPIO()
 {
-	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOBEN; // enable peripheral clock for Port B
-	GPIOB->MODER |= (1<<0); // pin 0 port B is output
-	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOGEN; // enable peripheral clock for Port G
-	GPIOG->MODER |= (1<<0); // pin 0 port G is output
+  RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN; // enable peripheral clock for Port A
+  RCC->AHB1ENR |= RCC_AHB1ENR_GPIOBEN; // enable peripheral clock for Port B
+  RCC->AHB1ENR |= RCC_AHB1ENR_GPIOCEN; // enable peripheral clock for Port C
+  RCC->AHB1ENR |= RCC_AHB1ENR_GPIOGEN; // enable peripheral clock for Port G
 
-	// SPI1
-	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN; // enable peripheral clock for Port A
+  GPIOC->MODER |= (1<<0); // PC0 as output for CS (BME280)
+  GPIOB->MODER |= (1<<0); // PB0 as output (LED1)
+  GPIOG->MODER |= (1<<0); // PG0 as output (Test-Pin)
+  GPIOA->MODER |= (2<<10) | (2<<12) | (2<<14); // Alternate functions for PA5 (SPI1_CLK), PA6 (SP1_MISO) and PA7 (SPI1_MOSI)
+  GPIOA->MODER |= (1<<0);  // PA0 as output for DC (LCD)
+  GPIOB->MODER |= (1<<12); // PB6 as output for CS (LCD)
+  GPIOB->MODER |= (1<<18); // PB9 as output for RST (LCD)
+  GPIOB->MODER |= (2<<26) | (2<<30); // Alternate functions for PB13 (SPI2_CLK) and PB15 (SPI2_MOSI)
+  GPIOC->MODER |= (2<<4); // Alternate function for PC2 (SPI2_MISO)
 
-	GPIOA->MODER |= (2<<10) | (2<<12) | (2<<14); // Alternate function for PA5 (SPI1_CLK), PA6 (SP1_MISO) and PA7 (SPI1_MOSI)
-	GPIOA->MODER |= (1<<0);  // PA0 as output for DC
-	GPIOB->MODER |= (1<<12); // PB6 as output for SS
-	GPIOB->MODER |= (1<<18); // PB9 as output for RST
+  GPIOA->OSPEEDR |= (3<<0) | (3<<10) | (3<<12) | (3<<14); // high speed PA0 (SS), PA5 (SPI1_CLK), PA6 (SPI1_MISO) and PA7 (SPI1_MOSI)
+  GPIOB->OSPEEDR |= (3<<26) | (3<<30);
+  GPIOC->OSPEEDR |= (3<<4);
 
-	GPIOA->OSPEEDR |= (3<<0) | (3<<10) | (3<<12) | (3<<14); // high speed PA0 (SS), PA5 (SPI1_CLK), PA6 (SPI1_MISO) and PA7 (SPI1_MOSI)
-
-	GPIOA->AFR[0] |= (5<<20) | (5<<24) | (5<<28); // Alternate function 5 for SPI
+  GPIOA->AFR[0] |= (5<<20) | (5<<24) | (5<<28); // Alternate function 5 for SPI1
+  GPIOB->AFR[1] |= (5<<20) | (5<<28); // Alternate function 5 for SPI2
+  GPIOC->AFR[0] |= (5<<8);
 }
 
 void init_TIM2()
@@ -135,11 +207,12 @@ void init_NVIC()
   NVIC_EnableIRQ(TIM2_IRQn);
 }
 
+// For the ILI9341 LCD
 void init_SPI1()
 {
   RCC->APB2ENR |= RCC_APB2ENR_SPI1EN; // Enable SP1
 
-  // CPOL and CPHA is 0 by default
+  // CPOL and CPHA is 0 by default (SPI mode 0)
 
   SPI1->CR1 |= (3<<3); // divide SYSCLK by
 
@@ -155,6 +228,29 @@ void init_SPI1()
   SPI1->CR2 |= (3<<8); // 8 bits data
 
   SPI1->CR1 |= (1<<6); // Enable SPI
+}
+
+// For the BDM280
+void init_SPI2()
+{
+  RCC->APB1ENR |= RCC_APB1ENR_SPI2EN; // Enable SP2
+
+  // CPOL and CPHA is 0 by default (SPI mode 0)
+
+  SPI2->CR1 &= ~(7 << 3);
+  SPI2->CR1 |=  (6 << 3); // divide SYSCLK by 16
+
+  SPI2->CR1 |= SPI_CR1_SSM; // Enable software slave management
+  SPI2->CR1 |= SPI_CR1_SSI; // Set internal slave select to 1
+
+  // Full-duplex, RXONLY-Bit is default 0
+
+  SPI2->CR1 |= SPI_CR1_MSTR; // Set master mode
+
+  SPI2->CR2 |= (3<<8); // 8 bits data
+  SPI2->CR2 |= SPI_CR2_FRXTH; // Read 8 bits
+
+  SPI2->CR1 |= (1<<6); // Enable SPI
 }
 
 void GPIO_toggle_green_LED()

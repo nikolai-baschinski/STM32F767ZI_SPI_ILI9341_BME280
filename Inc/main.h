@@ -7,6 +7,7 @@ void init_GPIO();
 void init_TIM2();
 void init_NVIC();
 void init_SPI1();
+void init_SPI2();
 void GPIO_toggle_Pin_PG0();
 void GPIO_toggle_green_LED();
 
