@@ -1,14 +1,21 @@
-#include "lcd.h"
+#include "LCD.h"
 
-void init_TIM3(void)
+void init_LCD()
 {
-    RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
-    TIM3->CR1 = 0;
-    TIM3->PSC = 960 - 1;
-    TIM3->ARR = 0xFFFF;
-    TIM3->CNT = 0;
-    TIM3->EGR |= TIM_EGR_UG;
-    TIM3->CR1 |= TIM_CR1_CEN;
+  lcd_reset();
+  lcd_CS_enable();
+  lcd_init();
+  lcd_clear_display(WHITE);
+
+  Paint_NewImage(LCD_2IN4_WIDTH, LCD_2IN4_HEIGHT, ROTATE_270, WHITE);
+  Paint_SetClearFuntion(lcd_clear_display);
+  Paint_SetDisplayFuntion(lcd_draw_paint);
+
+  Paint_DrawString_EN(10, 30, "Temperat:      C", &Font24, WHITE, BLACK);
+  Paint_DrawString_EN(10, 60, "Pressure:      hPa", &Font24, WHITE, BLACK);
+  Paint_DrawString_EN(10, 90, "Humidity:      %", &Font24, WHITE, BLACK);
+
+  lcd_CS_disable();
 }
 
 void delay(unsigned int value_ms) {
@@ -251,4 +258,37 @@ void lcd_init()
   lcd_send_d(0x38);
   lcd_send_d(0x0F);
   lcd_send_c(0x29);
+}
+
+// write the data to the LCD on request and only if it has changed
+void cyclic_LCD(struct ProcessImage* p_pi)
+{
+  if(p_pi->print_on_lcd_flag == 1) {
+    p_pi->print_on_lcd_flag = 0;
+
+    if(p_pi->bme280.temperature != p_pi->bme280_memory.temperature) {
+      lcd_CS_enable();
+      Paint_ClearWindows(180, 30, 180+17*5, 50, WHITE);
+      Paint_DrawFloatNum(180, 30, p_pi->bme280.temperature, 1, &Font24, WHITE, BLACK);
+      lcd_CS_disable();
+    }
+
+    if(p_pi->bme280.pressure != p_pi->bme280_memory.pressure) {
+      lcd_CS_enable();
+      Paint_ClearWindows(180, 60, 180+17*4, 80, WHITE);
+      Paint_DrawNum(180, 60, p_pi->bme280.pressure, &Font24, WHITE, BLACK);
+      lcd_CS_disable();
+    }
+
+    if(p_pi->bme280.humidity != p_pi->bme280_memory.humidity) {
+      lcd_CS_enable();
+      Paint_ClearWindows(180, 90, 180+17*3, 110, WHITE);
+      Paint_DrawNum(180, 90, p_pi->bme280.humidity, &Font24, WHITE, BLACK);
+      lcd_CS_disable();
+    }
+
+    p_pi->bme280_memory.temperature = p_pi->bme280.temperature;
+    p_pi->bme280_memory.pressure = p_pi->bme280.pressure;
+    p_pi->bme280_memory.humidity = p_pi->bme280.humidity;
+  }
 }

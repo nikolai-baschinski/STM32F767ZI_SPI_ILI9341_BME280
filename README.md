@@ -33,6 +33,10 @@ Connections (https://os.mbed.com/platforms/ST-Nucleo-F767ZI/)
 
 BME280 raw data burst via SPI
 
+![Software_architecture](/Doc/Software_architecture.bmp)
+
+Software architecture
+
 Hardware
 BME280: https://seengreat.com/product/207/bme280-environmental-sensor?srsltid=AfmBOorvlymsT9w0Ea-JBnftBbgADYcXMKpadnPHUyHl7X1wOO5TTgUa
 

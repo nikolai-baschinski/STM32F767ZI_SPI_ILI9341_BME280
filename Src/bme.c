@@ -1,8 +1,15 @@
 #include <string.h>
-#include "bme.h"
+#include "BME.h"
 
 const uint8_t ctrl_meas_addr = 0xF4;
 const uint8_t ctrl_hum_addr = 0xF2;
+
+const float MAX_TEMPERATURE = 85.0f;
+const float MIN_TEMPERATURE = -40.0f;
+const uint16_t MAX_PRESSURE = 1100;
+const uint16_t MIN_PRESSURE = 300;
+const uint8_t MAX_HUMIDITY = 100;
+const uint8_t MIN_HUMIDITY = 0;
 
 struct Calibration_T {
   // The calibration values are individual for each sensor and have to be read
@@ -68,6 +75,25 @@ struct BME {
 
 struct BME bme;
 
+#define MAX_RECV_BURST 20
+
+uint8_t data_rcv_burst[MAX_RECV_BURST]= {0};
+uint16_t cntr_burst = 0;
+
+void SPI2_TransmitBurst(uint8_t data)
+{
+  while(!(SPI2->SR & SPI_SR_TXE));
+  SPI2->DR = data;
+
+  while(!(SPI2->SR & SPI_SR_TXE));
+  while(SPI2->SR & SPI_SR_BSY);
+
+  while((SPI2->SR & SPI_SR_RXNE) && (cntr_burst < MAX_RECV_BURST)) {
+    data_rcv_burst[cntr_burst] = SPI2->DR;
+    cntr_burst++;
+  }
+}
+
 void bme_set_raw_data(uint8_t* data_rcv_burst)
 {
   bme.Adc_P.P_msb  = data_rcv_burst[1];
@@ -87,20 +113,38 @@ void spi2_send(uint8_t byte)
   while(SPI2->SR & SPI_SR_BSY);
 }
 
-void bme_get_sensor_data(struct BME280_for_LCD* bme_data)
+void bme_get_sensor_data(struct BME280_for_LCD* p_bme_data)
 {
   int32_t t = bme.T;
   int32_t rounded = (t >= 0) ? (t + 5) / 10 : (t - 5) / 10;
-  bme_data->temperature = rounded / 10.0f;
+  p_bme_data->temperature = rounded / 10.0f;
+  if(p_bme_data->temperature < MIN_TEMPERATURE) {
+    p_bme_data->temperature = MIN_TEMPERATURE;
+  }
+
+  if(p_bme_data->temperature > MAX_TEMPERATURE) {
+    p_bme_data->temperature = MAX_TEMPERATURE;
+  }
 
   float tmp_P = bme.P / 25600.0f;
-  float tmp_H = bme.H / 1024.0f;
-
   uint16_t tmp_P_uint16 = tmp_P + 0.5f;
-  uint8_t tmp_H_uint8 = tmp_H + 0.5f;
+  p_bme_data->pressure = tmp_P_uint16;
+  if(p_bme_data->pressure < MIN_PRESSURE) {
+    p_bme_data->pressure = MIN_PRESSURE;
+  }
+  if(p_bme_data->pressure > MAX_PRESSURE) {
+    p_bme_data->pressure = MAX_PRESSURE;
+  }
 
-  bme_data->pressure = tmp_P_uint16;
-  bme_data->humidity = tmp_H_uint8;
+  float tmp_H = bme.H / 1024.0f;
+  uint8_t tmp_H_uint8 = tmp_H + 0.5f;
+  p_bme_data->humidity = tmp_H_uint8;
+  if(p_bme_data->humidity < MIN_HUMIDITY) {
+    p_bme_data->humidity = MIN_HUMIDITY;
+  }
+  if(p_bme_data->humidity > MAX_HUMIDITY) {
+    p_bme_data->humidity = MAX_HUMIDITY;
+  }
 }
 
 void bme_CS_enable()
@@ -214,18 +258,16 @@ void bme_fetch_compensation_data(struct BME* bme)
   bme->cal_H.dig_H6 = (int8_t)dig_H6;
 }
 
-void init_bme()
+void init_BME()
 {
-  bme_CS_disable();
-
-  memset(&bme, 0, sizeof(bme));
+  bme_CS_enable();
   bme_fetch_compensation_data(&bme);
 
-  bme_CS_enable();
   spi2_send(ctrl_hum_addr & 0x7F); // Write control byte address F2 write (0x72)
   spi2_send(0x01); // Data byte
   spi2_send(ctrl_meas_addr & 0x7F); // Write control byte address F4 write (0x74)
   spi2_send(0x27); // Data byte 0b0010.0111
+
   bme_CS_disable();
 }
 
@@ -307,3 +349,21 @@ void bme_compensate()
   compensate_H(&bme);
   compensate_P(&bme);
 }
+
+void cyclic_BME(struct BME280_for_LCD* p_bme_data)
+{
+  memset(&data_rcv_burst, 0, MAX_RECV_BURST);
+  cntr_burst = 0;
+
+  bme_CS_enable();
+  SPI2_TransmitBurst(0xF7); // start burst
+  for(int i=0; i<4; i++) {
+    SPI2_TransmitBurst(0xFF); // run the burst with dummy data on MOSI
+  }
+  bme_CS_disable();
+
+  bme_set_raw_data(data_rcv_burst);
+  bme_compensate();
+  bme_get_sensor_data(p_bme_data);
+}
+
