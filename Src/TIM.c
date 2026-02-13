@@ -1,4 +1,3 @@
-#include "stm32f767xx.h"
 #include "TIM.h"
 
 void init_TIM2()
@@ -28,3 +27,7 @@ void init_TIM()
   init_TIM3();
 }
 
+void delay(uint32_t ms) {
+  TIM3->CNT = 0;
+  while(TIM3->CNT < ms*100);
+}

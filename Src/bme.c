@@ -1,5 +1,6 @@
 #include <string.h>
 #include "BME.h"
+#include "TIM.h"
 
 const uint8_t ctrl_meas_addr = 0xF4;
 const uint8_t ctrl_hum_addr = 0xF2;
@@ -260,9 +261,13 @@ void bme_fetch_compensation_data(struct BME* bme)
 
 void init_BME()
 {
-  bme_CS_enable();
+  bme_CS_disable();
+  delay(20);
+
+  memset(&bme, 0, sizeof(bme));
   bme_fetch_compensation_data(&bme);
 
+  bme_CS_enable();
   spi2_send(ctrl_hum_addr & 0x7F); // Write control byte address F2 write (0x72)
   spi2_send(0x01); // Data byte
   spi2_send(ctrl_meas_addr & 0x7F); // Write control byte address F4 write (0x74)

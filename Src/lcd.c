@@ -1,4 +1,5 @@
-#include "LCD.h"
+#include <LCD.h>
+#include "TIM.h"
 
 void init_LCD()
 {
@@ -16,11 +17,6 @@ void init_LCD()
   Paint_DrawString_EN(10, 90, "Humidity:      %", &Font24, WHITE, BLACK);
 
   lcd_CS_disable();
-}
-
-void delay(unsigned int value_ms) {
-  TIM3->CNT = 0;
-  while(TIM3->CNT < value_ms*100);
 }
 
 void SPI1_Enable()
